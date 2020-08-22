@@ -117,12 +117,20 @@ app.on('activate', () => {
  *********************** IPC CHANNELS ***********************
  ************************************************************/
 
-const db_name: string = 'test';
 // Listen for files upload
 ipcMain.on('upload-file', (event, filePaths: string) => {
   console.log('file paths sent from renderer', filePaths);
-  // Process
-  exec(`docker exec postgres-1 psql -h localhost -p 5432 -U postgres -c "CREATE DATABASE ${db_name}"`,
+
+  // command strings 
+  const db_name: string = 'test';
+  const createDB : string = `docker exec postgres-1 psql -h localhost -p 5432 -U postgres -c "CREATE DATABASE ${db_name}"`;
+  const importFile : string = `docker cp ${filePaths} postgres-1:/data_dump`;
+  const runSQL : string = `docker exec postgres-1 psql -U postgres -d ${db_name} -f /data_dump`;
+  const runTAR : string = `docker exec postgres-1 pg_restore -U postgres -d ${db_name} /data_dump`;
+  const extension: string = filePaths[0].slice(filePaths[0].lastIndexOf('.'));
+
+  const addDB = (str : string, nextStep : any) => {
+    exec(str);
     (error, stdout, stderr) => {
       if (error) {
         console.log(`error: ${error.message}`);
@@ -133,51 +141,85 @@ ipcMain.on('upload-file', (event, filePaths: string) => {
         return;
       }
       console.log(`stdout: ${stdout}`);
-      exec(`docker cp ${filePaths} postgres-1:/data_dump`,
-        (error, stdout, stderr) => {
-          if (error) {
-            console.log(`error: ${error.message}`);
-            return;
-          }
-          if (stderr) {
-            console.log(`stderr: ${stderr}`);
-            return;
-          }
-          console.log(`stdout: ${stdout}`);
-          const extension: string = filePaths[0].slice(filePaths[0].lastIndexOf('.'));
-          console.log(extension);
-          if (extension === '.sql'){
-            exec(`docker exec postgres-1 psql -U postgres -d ${db_name} -f /data_dump`,
-              (error, stdout, stderr) => {
-                if (error) {
-                  console.log(`error: ${error.message}`);
-                  return;
-                }
-                if (stderr) {
-                  console.log(`stderr: ${stderr}`);
-                  return;
-                }
-                console.log(`stdout: ${stdout}`);
-              });
-          }
-          else if (extension === '.tar'){
-            exec(`docker exec postgres-1 pg_restore -U postgres -d ${db_name} /data_dump`,
-              (error, stdout, stderr) => {
-                if (error) {
-                  console.log(`error: ${error.message}`);
-                  return;
-                }
-                if (stderr) {
-                  console.log(`stderr: ${stderr}`);
-                  return;
-                }
-                console.log(`stdout: ${stdout}`);
-              });
-          }
-        });
-    });
-  // Send result back to renderer
+      if (nextStep) nextStep();
+    }
+  }
+
+  // Step 3 : Given the file path extension, run the appropriate command in postgres to build the db
+  const step3 = () => {
+    if (extension === '.sql') addDB(runSQL);
+    else if (extension === '.tar') addDB(runTAR);
+  }
+
+  // Step 2 : Import database file from file path into docker container
+  const step2 = addDB(importFile, step3);
+
+  // Step 1 : Create empty db
+  if (extension === '.sql' || extension === '.tar') addDB(createDB, step2);
+  else alert("INVAILD FILE TYPE: Please use .tar or .sql extensions.")
 });
+
+// const db_name: string = 'test';
+// // Listen for files upload
+// ipcMain.on('upload-file', (event, filePaths: string) => {
+//   console.log('file paths sent from renderer', filePaths);
+//   // Process
+//   exec(`docker exec postgres-1 psql -h localhost -p 5432 -U postgres -c "CREATE DATABASE ${db_name}"`,
+//     (error, stdout, stderr) => {
+//       if (error) {
+//         console.log(`error: ${error.message}`);
+//         return;
+//       }
+//       if (stderr) {
+//         console.log(`stderr: ${stderr}`);
+//         return;
+//       }
+//       console.log(`stdout: ${stdout}`);
+//       exec(`docker cp ${filePaths} postgres-1:/data_dump`,
+//         (error, stdout, stderr) => {
+//           if (error) {
+//             console.log(`error: ${error.message}`);
+//             return;
+//           }
+//           if (stderr) {
+//             console.log(`stderr: ${stderr}`);
+//             return;
+//           }
+//           console.log(`stdout: ${stdout}`);
+//           const extension: string = filePaths[0].slice(filePaths[0].lastIndexOf('.'));
+//           console.log(extension);
+//           if (extension === '.sql'){
+//             exec(`docker exec postgres-1 psql -U postgres -d ${db_name} -f /data_dump`,
+//               (error, stdout, stderr) => {
+//                 if (error) {
+//                   console.log(`error: ${error.message}`);
+//                   return;
+//                 }
+//                 if (stderr) {
+//                   console.log(`stderr: ${stderr}`);
+//                   return;
+//                 }
+//                 console.log(`stdout: ${stdout}`);
+//               });
+//           }
+//           else if (extension === '.tar'){
+//             exec(`docker exec postgres-1 pg_restore -U postgres -d ${db_name} /data_dump`,
+//               (error, stdout, stderr) => {
+//                 if (error) {
+//                   console.log(`error: ${error.message}`);
+//                   return;
+//                 }
+//                 if (stderr) {
+//                   console.log(`stderr: ${stderr}`);
+//                   return;
+//                 }
+//                 console.log(`stdout: ${stdout}`);
+//               });
+//           }
+//         });
+//     });
+//   // Send result back to renderer
+// });
 
 // Listen for user clicking skip button
 ipcMain.on('skip-file-upload', (event) => {});
