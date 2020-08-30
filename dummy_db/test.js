@@ -204,6 +204,14 @@ const fakerLink = {
   'vehicle.color' : () => {faker.vehicle.color()},
 }
 
+const types = {};
+types.unique = {};
+types.repeating = {};
+types.unique.str = (data) => {return 'unique.string'};
+types.unique.num = (data) => {return 'unique.number'};
+types.repeating.loop = (data) => {return 'loop'};
+types.repeating.weighted = (data) => {return 'weighted'};
+types.repeating.counted = (data) => {return 'counted'}
 
 const column = [{
   addVariable: (vars, i) => {
@@ -242,9 +250,14 @@ const columns = [
 const createRecordFunc = (cols) => {
   let output = [];
   cols.forEach(e => {
-    if (e.dataCategory === 'random') output.push(fakerLink[e.dataType]);
-    else if (e.dataCategory === '')
-    
+    const {dataCategory, dataType} = e;
+    if (dataCategory === 'random') output.push(fakerLink[dataType]);
+    else if (dataCategory === 'repeating' || dataCategory === 'unique') output.push(types[dataCategory][dataType]);
+    // ADD OTHER DATA TYPES HERE
+    else {
+      console.log(`ERROR: Column ${e.name} has an invalid data type. Table will still populate but this column will be empty.`)
+      output.push (() => {});
+    }
   } );
   return output;
 };
@@ -253,9 +266,7 @@ const createRecordFunc = (cols) => {
 
 const test = createRecordFunc(columns)
 console.log(test[0]());
-console.log(test[0]());
 
-console.log(test[0]());
 
   ;
 
