@@ -1,24 +1,23 @@
 // import types from './dd_types.js';
 const faker = require('faker');
+// const fakerlink = require('./fakerfile.js');
  
-console.log(faker.name.findName()); // Rowan Nikolaus
-console.log(faker.internet.email()); // Kassandra.Haley@erich.biz
-console.log(faker.helpers.createCard());
+// console.log(faker.name.findName()); // Rowan Nikolaus
+// console.log(faker.internet.email()); // Kassandra.Haley@erich.biz
+// console.log(faker.name.lastName());
+
 
 
 const types = {};
+types.unique = {};
+types.repeating = {};
+types.unique.str = (data) => {return 'unique.string'};
+types.unique.num = (data) => {return 'unique.number'};
+types.repeating.loop = (data) => {return 'loop'};
+types.repeating.weighted = (data) => {return 'weighted'};
+types.repeating.counted = (data) => {return 'counted'}
 
-types.string = function (data) {return 'string'};
-
-types.integer = function (data) {return 'integer'};
-
-types.phoneNumbers = function (data) {return 'phone number'};
-
-types.email = function (data) {return 'email'};
-
-types.foreign = function (data) {return '$#<table|column|index>#$'}
-
-
+console.log(types.unique.str());
 
 const fromApp = [
   {
@@ -28,19 +27,29 @@ const fromApp = [
     columns : [
       {
         name : 'username',
-        dataType : 'string',
+        dataCategory : 'random', // random, repeating, unique, combo, foreign
+        dataType : 'name.lastName',
         data : {
           unique : true,
           strLength : [8, 20],
+        },
+      },
+      {
+        name : 'phone_numbers',
+        dataCategory : 'unique', // random, repeating, unique, combo, foreign
+        dataType : 'phoneNumbers', ///////////////////////////
+        data : {
+          unique : true
         }
       },
       {
         name : 'phone_numbers',
-        dataType : 'phoneNumbers',
+        dataCategory : 'custom', // random, repeating, unique, combo, foreign
+        dataType : 'phoneNumbers', /////////////////////////
         data : {
           unique : true
         }
-      }
+      },
     ]
   },
   {
@@ -85,7 +94,7 @@ const fromApp = [
 
 ]
 
-// deconstruct and convert to string the column names
+// deconstruct and convert the column names to a single string
 const columnList = (columns) => {      
   let list = '';
   columns.forEach( (e , i) => {
@@ -95,14 +104,53 @@ const columnList = (columns) => {
   return list;
 }
 
+// appened any necessary tracking variables to the table level  
+// loop through column data types and run element.addVariable to assign variables to the index of the column on "variables".
+// use the index to handle any tables that have multiple columns of the same data type.
+const createVariables = (cols) => {
+  let vars = [];
+  cols.forEach ( (e, i) => {if (e.addVariable) e.addVariable(vars, i);} )
+  return vars;
+};
+/*
+const columns = [
+  {
+    addVariable: (vars, i) => {
+      vars[i] = {
+        test : "Yes"
+      }
+    }
+  }
+];
+*/
+
+
+const createRecordFunc = (cols) => {
+  let output = [];
+  cols.forEach(e => {
+    if (e.dataCategory === 'random') output.push(() => {})
+  } );
+};
+
+
 // populate the values, repeat for scale
 const valuesList = (columns, scale) => {
+  const recordBuilder = {};
+  // create an array with each element as the necessary function to call that column's data type (first column = first element, etc)
+  // this will remove the need to run switch statements on each record as this happens at the table level.
+  // recordBuilder.funcs = createRecordFunc(columns);
+  // create variables that need to exist on the table level
+  recordBuilder.vars = createVariables(columns);
+
   let list = '';
+
   // create the number of records equal to the scale of the table
   for (let i = 0; i < scale; i += 1) {
+    // start each record as an empty string
     let record = '';
+    // traverse each column and concat the results of calling the the data type function
     columns.forEach( (e, k) => {
-      record += `${types[e.dataType](e.data, i)}`;
+      record += `${types[e.dataType](e.data, i, variables[i])}`;
       if (k < columns.length - 1) record += ', ';
     })
     list += `(${record})`
