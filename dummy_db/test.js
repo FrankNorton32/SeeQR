@@ -204,71 +204,101 @@ const fakerLink = {
   'vehicle.color' : () => {faker.vehicle.color()},
 }
 
-const types = {};
-types.unique = {};
-types.repeating = {};
-types.unique.str = (data) => {return 'unique.string'};
-types.unique.num = (data) => {return 'unique.number'};
-types.repeating.loop = (data) => {return 'loop'};
-types.repeating.weighted = (data) => {return 'weighted'};
-types.repeating.counted = (data) => {return 'counted'}
 
-const column = [{
-  addVariable: (vars, i) => {
-    vars[i] = {
-      test : "Yes"
-    }
-  }
-}];
+const types = {
+  unique : {
+    str : {},
+    num : {},
+  },
+  repeating : {
+    loop : {},
+    weighted : {},
+    counted : {},
+  },
+};
 
-const createVariables = (cols) => {
-  let vars = [];
-  cols.forEach ( (e, i) => {if (e.addVariable) e.addVariable(vars, i);} )
-  return vars;
+const data = {
+  length : [5, 15],
+  inclNum : true,
+  inclSpaces : false,
+  inclSpecChar : false,
+  include : ["include", "these", "once", "austS"],
 }
 
-// const variable2 = createVariables(column);
-// console.log('second', variable2);
+const scale = 90;
 
-
-// faker.name.lastName()
-
-
-const columns = [
-  {
-    name : 'username',
-    dataCategory : 'random', // random, repeating, unique, custom
-    dataType : 'name.lastName',
-    data : {
-      unique : true,
-      strLength : [8, 20],
-    },
+types.unique.str.record = (data, index, vars) => {
+  /*
+data = {
+  length : [1, 15],
+  inclNum : true,
+  inclSpaces : true,
+  inclSpecChar : true,
+  include : ["include", "these", "once", "austS"],
+}
+  */
+  const {chars, unique, lockedIndexes} = vars;
+  let output = unique[index];
+  if (lockedIndexes.includes(index)) return output;
+  const strLen = Math.round(Math.random() * (data.length[1] - data.length[0])) + data.length[0];
+  for (let i = unique[index].length; i < strLen; i += 1) {
+    output += chars[Math.floor(Math.random() * Math.floor(chars.length))]
   }
-];
-
-
-const createRecordFunc = (cols) => {
-  let output = [];
-  cols.forEach(e => {
-    const {dataCategory, dataType} = e;
-    if (dataCategory === 'random') output.push(fakerLink[dataType]);
-    else if (dataCategory === 'repeating' || dataCategory === 'unique') output.push(types[dataCategory][dataType]);
-    // ADD OTHER DATA TYPES HERE
-    else {
-      console.log(`ERROR: Column ${e.name} has an invalid data type. Table will still populate but this column will be empty.`)
-      output.push (() => {});
-    }
-  } );
   return output;
 };
 
-// console.log(createRecordFunc(columns))
+types.unique.str.variable = (data, scale) => {
+  const output = {
+    chars : 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    unique : [],
+    lockedIndexes : [],
+  }
+  // if character types are 'true', append them to the character list
+  if (data.inclNum) output.chars += '0123456789';
+  if (data.inclSpaces) output.chars += ' ';
+  if (data.inclSpecChar) output.chars += ',.?;:!@#$%^&*';
+  // ensure that the minimum length can accommodate unique values to the length of the scale
+  let min = 1;
+  while (output.chars.length ** min < scale) min += 1;
+  // create minimum unique keys in sequence for quick retrieval when creating record
+  // stop once scale is reached
+  (buildUnique = (str = '') => {
+    if (str.length === min) {
+      output.unique.push(str);
+      return;
+    }
+    for (const char of output.chars) {
+      if (output.unique.length === scale) return;
+      buildUnique(str + char);
+    }
+  })();
+  // handle INCLUDE values : values the user requires to exist
+  // find the first chars up to the index of min (prefix) then search the unique array for that prefix.
+  // if it exist, replace it with the full string.
+  // if not, find a random index and insert the full string there.
+  // Keep track of the indexes already use to avoid overwriting something we need to save (lockedIndex on output)
+  if (data.include > scale) console.log(`ERROR: Entries in 'Include' exceed the scale of the table, some values will not be represented.` )
+  data.include.sort();
+  for (let i = 0; i < data.include.length && i < scale; i += 1) {
+    let prefix = ''; 
+    for (let k = 0; k < min && k < data.include[i].length; k += 1) prefix += data.include[i][k];
+    let index = output.unique.indexOf(prefix);
+    while (output.lockedIndexes.includes(index) || index === -1) {
+      index = Math.floor(Math.random() * Math.floor(scale));
+    }
+    output.lockedIndexes.push(index);
+    output.unique[index] = data.include[i];
+  }
+  output.lockedIndexes.sort();
+  return output;
+};
 
-const test = createRecordFunc(columns)
-console.log(test[0]());
+let variables = types.unique.str.variable(data, scale)
+console.log(variables);
+for (let i = 0; i < 10; i += 1) {
+  console.log(`---${types.unique.str.record(data, i, variables)}`);
+}
 
 
-  ;
 
-
-
+// console.log(3 ** 4);

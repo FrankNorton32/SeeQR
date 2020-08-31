@@ -185,8 +185,9 @@ const fakerLink = {
   'vehicle.vin' : faker.vehicle.vin,
   'vehicle.color' : faker.vehicle.color,
 };
-let test = fakerLink['vehicle.color']
-console.log(test())
+let test = fakerLink['helpers.slugify'];
+console.log(test());
+
 const types = {
   unique : {
     str : {},
@@ -199,8 +200,72 @@ const types = {
   },
 };
 
-types.unique.str.record = (data) => {return 'unique.string'};
-types.unique.str.variable = (vars, i) => {vars[i] = {      }};
+types.unique.str.record = (data, index, vars) => {
+  /*
+data = {
+  length : [1, 15],
+  inclNum : true,
+  inclSpaces : true,
+  inclSpecChar : true,
+  include : ["include", "these", "once", "austS"],
+}
+  */
+  const {chars, unique, lockedIndexes} = vars;
+  let output = unique[index];
+  if (lockedIndexes.includes(index)) return output;
+  const strLen = Math.round(Math.random() * (data.length[1] - data.length[0])) + data.length[0];
+  for (let i = unique[index].length; i < strLen; i += 1) {
+    output += chars[Math.floor(Math.random() * Math.floor(chars.length))]
+  }
+  return output;
+};
+
+types.unique.str.variable = (data, scale) => {
+  const output = {
+    chars : 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    unique : [],
+    lockedIndexes : [],
+  }
+  // if character types are 'true', append them to the character list
+  if (data.inclNum) output.chars += '0123456789';
+  if (data.inclSpaces) output.chars += ' ';
+  if (data.inclSpecChar) output.chars += ',.?;:!@#$%^&*';
+  // ensure that the minimum length can accommodate unique values to the length of the scale
+  let min = 1;
+  while (output.chars.length ** min < scale) min += 1;
+  // create minimum unique keys in sequence for quick retrieval when creating record
+  // stop once scale is reached
+  (buildUnique = (str = '') => {
+    if (str.length === min) {
+      output.unique.push(str);
+      return;
+    }
+    for (const char of output.chars) {
+      if (output.unique.length === scale) return;
+      buildUnique(str + char);
+    }
+  })();
+  // handle INCLUDE values : values the user requires to exist
+  // find the first chars up to the index of min (prefix) then search the unique array for that prefix.
+  // if it exist, replace it with the full string.
+  // if not, find a random index and insert the full string there.
+  // Keep track of the indexes already use to avoid overwriting something we need to save (lockedIndex on output)
+  if (data.include > scale) console.log(`ERROR: Entries in 'Include' exceed the scale of the table, some values will not be represented.` )
+  data.include.sort();
+  for (let i = 0; i < data.include.length && i < scale; i += 1) {
+    let prefix = ''; 
+    for (let k = 0; k < min && k < data.include[i].length; k += 1) prefix += data.include[i][k];
+    let index = output.unique.indexOf(prefix);
+    while (output.lockedIndexes.includes(index) || index === -1) {
+      index = Math.floor(Math.random() * Math.floor(scale));
+    }
+    output.lockedIndexes.push(index);
+    output.unique[index] = data.include[i];
+  }
+  output.lockedIndexes.sort();
+  return output;
+};
+
 types.unique.num.record = (data) => {return 'unique.number'};
 types.unique.num.variable = (vars, i) => {vars[i] = {      }};
 types.repeating.loop.record = (data) => {return 'loop'};
@@ -214,31 +279,32 @@ const fromApp = [
   {
     schema : 'schema1',
     table : 'table1',
-    scale : 500,
+    scale : 5,
     columns : [
       {
         name : 'last_name',
-        dataCategory : 'random', // random, repeating, unique, combo, foreign
-        dataType : 'name.lastName',
+        dataCategory : 'unique', // random, repeating, unique, combo, foreign
+        dataType : 'str',
         data : {
-          unique : true,
-          strLength : [8, 20],
+          length : [5, 15],
+          inclNum : true,
+          inclSpaces : false,
+          inclSpecChar : false,
+          include : ["include", "these", "once", "austS"],
         },
       },
       {
         name : 'first_name',
         dataCategory : 'random', // random, repeating, unique, combo, foreign
-        dataType : 'name.firstName', ///////////////////////////
+        dataType : 'name.firstName', 
         data : {
-          unique : true
         }
       },
       {
         name : 'company_name',
-        dataCategory : 'random', // random, repeating, unique, combo, foreign
-        dataType : 'company.companyName', /////////////////////////
+        dataCategory : 'random',
+        dataType : 'company.companyName', 
         data : {
-          unique : true
         }
       },
     ]
@@ -283,58 +349,19 @@ const fromApp = [
   //   ]
   // }
 
-]
+];
 
-
-// DEFINE TYPE FORMULAS FOR EACH COLUMN (prior to iterating)
-// Helper function: connect each column to its appropriate function prior to creating records to reduce redundant function calls.
-const createRecordFunc = (cols) => {
-  let output = [];
-  cols.forEach(e => {
-    const {dataCategory, dataType} = e;
-    if (dataCategory === 'random') output.push(fakerLink[dataType]);
-    else if (dataCategory === 'repeating' || dataCategory === 'unique') output.push(types[dataCategory][dataType]);
-    // ADD OTHER DATA TYPES HERE
-    else {
-      console.log(`ERROR: Column ${e.name} has an invalid data type. Table will still populate but this column will be empty.`)
-      output.push (() => {});
-    }
-  } );
-  return output;
-};
-
-// APPEND ANY NECCESSARY VARIABLES TO THE TABLE LEVEL 
-// loop through column data types and run element.variable to assign variables to the index of the column on "variables".
-// use the index to handle any tables that have multiple columns of the same data type.
-const createVariables = (cols) => {
-  let vars = [];
-  cols.forEach ( (e, i) => {if (e.addVariable) e.variable(vars, i);} )
-  return vars;
-};
-
-// CREATE ALL VALUES FOR ALL RECORDS AT SCALE 
-const valuesList = (columns, scale) => {
-  const recordBuilder = {};
-  // create an array with each element as the necessary function to call that column's data type (first column = first element, etc)
-  // this will remove the need to run switch statements on each record as this happens at the table level.
-  const columnTypes = createRecordFunc(columns);
-  // create variables that need to exist on the table level
-  const variables = createVariables(columnTypes);
-  let list = '';
-  // create the number of records equal to the scale of the table
-  for (let i = 0; i < scale; i += 1) {
-    // start each record as an empty string
-    let record = '';
-    // traverse each column and concat the results of calling the the data type function
-    columnTypes.forEach( (e, k) => {
-      record += `${e()}`;
-      if (k < columns.length - 1) record += ', ';
-    })
-    list += `(${record})`
-    if (i < scale - 1) list += ', ';
+// GENERATE 'INSERT INTO' QUERY STRING
+// populate all information into a single set of INSERT INTO queries
+// FORM (argument) = DB generation form object submitted by user - from front end
+const createInsertQuery = (form) => {
+  let insertString = '';
+  for (let i = 0; i < form.length; i += 1) {
+    insertString += `INSERT INTO "${form[i].schema}"."${form[i].table}"(${columnList(form[i].columns)}) VALUES ${valuesList(form[i].columns, form[i].scale)}; `;
   }
-  return list;
-};
+  return insertString;
+}
+
 
 // CREATE 'COLUMN' STRING FOR QUERY
 // deconstruct and convert the column names to a single string
@@ -347,19 +374,74 @@ const columnList = (columns) => {
   return list;
 }
 
-// GENERATE 'INSERT INTO' QUERY STRING
-// populate all information into a single set of INSERT INTO queries
-const createInsert = (data) => {
-  let insertString = '';
-  for (let i = 0; i < data.length; i += 1) {
-    insertString += `INSERT INTO "${data[i].schema}"."${data[i].table}"(${columnList(data[i].columns)}) VALUES ${valuesList(data[i].columns, data[i].scale)}; `;
+
+// CREATE ALL VALUES FOR ALL RECORDS AT SCALE
+// Arguments: column = form.columns, scale = form.scale
+const valuesList = (columns, scale) => {
+  const recordBuilder = {};
+  // create an array with each element as the necessary function to call that column's data type (first column = first element, etc)
+  // this will remove the need to run switch statements on each record as this happens at the table level.
+  const columnTypes = createRecordFunc(columns);
+  // create variables that need to exist on the table level
+  const variables = createVariables(columnTypes, columns);
+  let list = '';
+  // create the number of records equal to the scale of the table
+  for (let i = 0; i < scale; i += 1) {
+    // start each record as an empty string
+    let record = '';
+    // traverse each column and concat the results of calling the the data type function
+    columnTypes.forEach( (e, k) => {
+    console.log("valuesList -> columnTypes", columnTypes.record)
+      // concat to the record the results of passing 
+      record += `${e.record(columns[k].data, i, variables[k])}`;
+      if (k < columns.length - 1) record += ', ';
+    })
+    list += `(${record})`
+    if (i < scale - 1) list += ', ';
   }
-  return insertString;
-}
+  return list;
+};
+
+
+// DEFINE TYPE FORMULAS FOR EACH COLUMN (prior to iterating)
+// Helper function: connect each column to its appropriate function prior to creating records to reduce redundant function calls.
+const createRecordFunc = (columns) => {
+  let output = [];
+  columns.forEach(e => {    
+    const {dataCategory, dataType} = e;
+    console.log("createRecordFunc -> dataCategory", dataCategory)
+    if (dataCategory === 'random') output.push(fakerLink[dataType]);
+    else if (dataCategory === 'repeating' || dataCategory === 'unique') output.push(types[dataCategory][dataType]);
+    // ADD OTHER DATA TYPES HERE
+    else {
+      console.log(`ERROR: Column ${e.name} has an invalid data type. Table will still populate but this column will be empty.`)
+      output.push (() => {});
+    }
+  } );
+  return output;
+};
+
+
+// APPEND ANY NECCESSARY VARIABLES TO THE TABLE LEVEL 
+// loop through column data types and run element.variable to assign variables to the index of the column on "variables".
+// use the index to handle any tables that have multiple columns of the same data type.
+const createVariables = (columnTypes, columns, scale) => {
+  let vars = [];
+  columnTypes.forEach ( (e, i) => {
+    (e.variable) ? vars[i] = e.variable(columns[i].data, scale) : vars[i] = false;
+  } )
+  return vars;
+};
 
 
 
-console.log(createInsert(fromApp));
+
+
+
+
+
+
+console.log(createInsertQuery(fromApp));
 
 
 
