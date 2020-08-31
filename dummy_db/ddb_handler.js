@@ -306,7 +306,7 @@ const fromApp = [
         dataType : 'company.companyName', 
         data : {
         }
-      },
+      }
     ]
   },
   // {
@@ -432,14 +432,6 @@ const createVariables = (columnTypes, columns, scale) => {
   } )
   return vars;
 };
-
-
-
-
-
-
-
-
 
 console.log(createInsertQuery(fromApp));
 
