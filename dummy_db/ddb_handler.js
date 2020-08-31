@@ -378,7 +378,6 @@ const columnList = (columns) => {
 // CREATE ALL VALUES FOR ALL RECORDS AT SCALE
 // Arguments: column = form.columns, scale = form.scale
 const valuesList = (columns, scale) => {
-  const recordBuilder = {};
   // create an array with each element as the necessary function to call that column's data type (first column = first element, etc)
   // this will remove the need to run switch statements on each record as this happens at the table level.
   const columnTypes = createRecordFunc(columns);
@@ -393,7 +392,7 @@ const valuesList = (columns, scale) => {
     columnTypes.forEach( (e, k) => {
     console.log("valuesList -> columnTypes", columnTypes.record)
       // concat to the record the results of passing 
-      record += `${e.record(columns[k].data, i, variables[k])}`;
+      record += `${(e.record) ? e.record(columns[k].data, i, variables[k]) : e()}`;
       if (k < columns.length - 1) record += ', ';
     })
     list += `(${record})`
@@ -409,6 +408,7 @@ const createRecordFunc = (columns) => {
   let output = [];
   columns.forEach(e => {    
     const {dataCategory, dataType} = e;
+    console.log("createRecordFunc -> dataType", dataType)
     console.log("createRecordFunc -> dataCategory", dataCategory)
     if (dataCategory === 'random') output.push(fakerLink[dataType]);
     else if (dataCategory === 'repeating' || dataCategory === 'unique') output.push(types[dataCategory][dataType]);
@@ -418,6 +418,7 @@ const createRecordFunc = (columns) => {
       output.push (() => {});
     }
   } );
+  console.log("createRecordFunc -> output", output)
   return output;
 };
 
